@@ -52,7 +52,7 @@ def init_weights(m):
     try:
         nn.init.orthogonal_(m.weight.data)
     except:
-        print('bad init')
+        # print(m,'bad init')
         pass
     
     

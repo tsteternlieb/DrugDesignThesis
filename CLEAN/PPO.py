@@ -13,7 +13,7 @@ from torch.distributions import Categorical
 import dgl
 
 from enviroment.ChemEnv import ChemEnv
-from enviroment.utils import selfLoop
+from enviroment.Utils import selfLoop
 from models import init_weights_recursive, BaseLine, CriticSqueeze
 
 device = None
@@ -68,7 +68,7 @@ class PPO_MAIN:
         self.actor_optim = Adam(self.actor.parameters(), lr=self.a_lr,eps=1e-5, weight_decay=.001)
         self.critic_optim = Adam(self.critic.parameters(), lr=self.c_lr,eps=1e-5, weight_decay=.001)
 
-        #self.actor.apply(init_weights_recursive)
+        self.actor.apply(init_weights_recursive)
         self.critic.apply(init_weights_recursive)     
      
         self.batch_iter = 0
@@ -114,8 +114,6 @@ class PPO_MAIN:
             
             
             batch_obs, batch_acts, batch_log_probs, batch_rtgs, batch_lens = self.rollout()               
-            
-                
             t_so_far += np.sum(batch_lens)
 
             # Increment the number of iterations
@@ -129,42 +127,40 @@ class PPO_MAIN:
             
             A_k = (A_k - A_k.mean()) / (A_k.std() + 1e-10)
         
-            # This is the loop where we update our network for some n epochs
+            # This is the loop where we update our network for some n times
             
             train_data_tuple = []
             for i in range(len(batch_obs)):
                 single_tuple = (batch_obs[i],batch_acts[i],batch_rtgs[i],batch_log_probs[i],A_k[i])
                 train_data_tuple.append(single_tuple)
+    
+            random.shuffle(train_data_tuple)
+            batchlet_obs,batchlet_acts,batchlet_rtgs,batchlet_log_probs,A_k_let = zip(*train_data_tuple)
                 
-   
-
-                random.shuffle(train_data_tuple)
-                i = 0
-                batchlet_obs,batchlet_acts,batchlet_rtgs,batchlet_log_probs,A_k_let = zip(*train_data_tuple)
+            failed_outer = False
+            i = 0
+            
+            while i < len(batch_obs)-65:
                 
-                failed_outer = False
-                
-                
-                
-                while i < len(batch_obs)-65:
+                #get batches
+                batchlet_obs_slice = batchlet_obs[i : (i+self.batch_size)]
+                batchlet_acts_slice = torch.stack(batchlet_acts[i : (i+self.batch_size)],0).to(device)
+                batchlet_rtgs_slice = torch.stack(batchlet_rtgs[i : (i+self.batch_size)],0).to(device)
+                batchlet_log_probs_slice = torch.stack(batchlet_log_probs[i : (i+self.batch_size)],0).to(device)
+                batchlet_A_k_slice = torch.stack(A_k_let[i : (i+self.batch_size)],0).to(device)
                     
-                    batchlet_obs_slice = batchlet_obs[i : (i+self.batch_size)]
-                    batchlet_acts_slice = torch.stack(batchlet_acts[i : (i+self.batch_size)],0).to(device)
-                    batchlet_rtgs_slice = torch.stack(batchlet_rtgs[i : (i+self.batch_size)],0).to(device)
-                    batchlet_log_probs_slice = torch.stack(batchlet_log_probs[i : (i+self.batch_size)],0).to(device)
-                    batchlet_A_k_slice = torch.stack(A_k_let[i : (i+self.batch_size)],0).to(device)
-                        
-                        
-                        
-                    failed = self.train_on_batch(batchlet_obs_slice, batchlet_acts_slice, batchlet_rtgs_slice,
-                                        batchlet_log_probs_slice,batchlet_A_k_slice)
-                    if failed:
-                        failed_outer = True
-                        break
-                    i += self.batch_size
-                
-                if failed_outer:
+                    
+                #failed if KL is too high     
+                failed = self.train_on_batch(batchlet_obs_slice, batchlet_acts_slice, batchlet_rtgs_slice,
+                                    batchlet_log_probs_slice,batchlet_A_k_slice)
+                if failed:
+                    failed_outer = True
                     break
+                
+                i += self.batch_size
+            
+            if failed_outer:
+                break
                 
     def train_on_batch(self, batch_obs, batch_acts, batch_rtgs, batch_log_probs, A_k):
         V, curr_log_probs = self.evaluate(batch_obs, batch_acts, batch_rtgs)
@@ -174,13 +170,9 @@ class PPO_MAIN:
         
         kl_approx = torch.mean(batch_log_probs - curr_log_probs)
         self.writer.add_scalar('Approximate KL', kl_approx, self.batch_iter)
-#         kl_approx = torch.exp(batch_log_probs)*kl_approx
-#         kl_approx.detach().numpy()
-#         print(kl_approx)
-        
+
         if kl_approx>.06:
             failed=True
-        #print(kl_approx, "kl_approx")
         
         ratios = torch.exp(curr_log_probs - batch_log_probs)
 
@@ -192,15 +184,13 @@ class PPO_MAIN:
 
         actor_loss = (-torch.min(surr1, surr2)).mean()
         critic_loss = nn.MSELoss()(V, batch_rtgs)
-        #self.critic_loss_over_time.append(critic_loss)
 
         self.writer.add_scalar('Actor Loss', actor_loss, self.batch_iter)
         self.writer.add_scalar('Critic Loss', actor_loss, self.batch_iter)
         self.batch_iter += 1
-        #print(critic_loss)
 #               
         self.critic_optim.zero_grad()
-        critic_loss.backward(retain_graph = True)#=True)
+        critic_loss.backward(retain_graph = True)
         torch.nn.utils.clip_grad_norm_(self.critic.parameters(), .5)  
         self.critic_optim.step()
 
@@ -210,6 +200,8 @@ class PPO_MAIN:
         self.actor_optim.step()
     
         return failed
+    
+    
     def generate_graphs(self, num_graphs):
         graph_list = []
         for i in range(num_graphs):
