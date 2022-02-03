@@ -13,12 +13,12 @@ from torch.distributions import Categorical
 import dgl
 
 from enviroment.ChemEnv import ChemEnv
-from enviroment.Utils import selfLoop
+from enviroment.utils import selfLoop
 from models import init_weights_recursive, BaseLine, CriticSqueeze
 
 device = None
 
-class PPO_MAIN:
+class PPOTrainer:
 
     
     def __init__(self,
@@ -60,7 +60,6 @@ class PPO_MAIN:
 
          # Initialize actor and critic networks
         self.critic = CriticSqueeze(input_dim,300)
-        #self.actor = Spin2(input_dim,300,14)
         self.actor = actor
         
         # Initialize optimizers for actor and critic
@@ -110,10 +109,11 @@ class PPO_MAIN:
         """
         t_so_far = 0
         while t_so_far < total_timesteps:                                                                       # ALG STEP 2
+            print(t_so_far)
             
             
-            
-            batch_obs, batch_acts, batch_log_probs, batch_rtgs, batch_lens = self.rollout()               
+            batch_obs, batch_acts, batch_log_probs, batch_rtgs, batch_lens = self.rollout()  
+            print(np.sum(batch_lens))             
             t_so_far += np.sum(batch_lens)
 
             # Increment the number of iterations
@@ -139,28 +139,35 @@ class PPO_MAIN:
                 
             failed_outer = False
             i = 0
-            
-            while i < len(batch_obs)-65:
+
+            for _ in range(self.n_updates_per_iteration):                                                       # ALG STEP 6 & 7
+                random.shuffle(train_data_tuple)
+                i = 0
+                batchlet_obs,batchlet_acts,batchlet_rtgs,batchlet_log_probs,A_k_let = zip(*train_data_tuple)
                 
-                #get batches
-                batchlet_obs_slice = batchlet_obs[i : (i+self.batch_size)]
-                batchlet_acts_slice = torch.stack(batchlet_acts[i : (i+self.batch_size)],0).to(device)
-                batchlet_rtgs_slice = torch.stack(batchlet_rtgs[i : (i+self.batch_size)],0).to(device)
-                batchlet_log_probs_slice = torch.stack(batchlet_log_probs[i : (i+self.batch_size)],0).to(device)
-                batchlet_A_k_slice = torch.stack(A_k_let[i : (i+self.batch_size)],0).to(device)
+                failed_outer = False
+            
+                while i < len(batch_obs)-65:
                     
+                    #get batches
+                    batchlet_obs_slice = batchlet_obs[i : (i+self.batch_size)]
+                    batchlet_acts_slice = torch.stack(batchlet_acts[i : (i+self.batch_size)],0).to(device)
+                    batchlet_rtgs_slice = torch.stack(batchlet_rtgs[i : (i+self.batch_size)],0).to(device)
+                    batchlet_log_probs_slice = torch.stack(batchlet_log_probs[i : (i+self.batch_size)],0).to(device)
+                    batchlet_A_k_slice = torch.stack(A_k_let[i : (i+self.batch_size)],0).to(device)
+                        
+                        
+                    #failed if KL is too high     
+                    failed = self.train_on_batch(batchlet_obs_slice, batchlet_acts_slice, batchlet_rtgs_slice,
+                                        batchlet_log_probs_slice,batchlet_A_k_slice)
+                    if failed:
+                        failed_outer = True
+                        break
                     
-                #failed if KL is too high     
-                failed = self.train_on_batch(batchlet_obs_slice, batchlet_acts_slice, batchlet_rtgs_slice,
-                                    batchlet_log_probs_slice,batchlet_A_k_slice)
-                if failed:
-                    failed_outer = True
+                    i += self.batch_size
+                
+                if failed_outer:
                     break
-                
-                i += self.batch_size
-            
-            if failed_outer:
-                break
                 
     def train_on_batch(self, batch_obs, batch_acts, batch_rtgs, batch_log_probs, A_k):
         V, curr_log_probs = self.evaluate(batch_obs, batch_acts, batch_rtgs)
@@ -216,18 +223,7 @@ class PPO_MAIN:
         
         return (graph_list)
     
-    # def infer_step(self,verbose=True, start_mol = None):
-    #     if start_mol == None:
-    #         obs = self.env.reset()
-    #     else:
-    #         self.StateSpace = Chem.RWMol(start_mol)
-            
-            
-    #     action, log_prob = self.get_action(obs)
-    #     obs, rew, done, reward_dict  = self.env.step(action[0],verbose)
-    #     return self.env.StateSpace
-        
-    
+
     def inference(self,verbose=False):
         reward = 0
         obs = self.env.reset()
@@ -243,6 +239,7 @@ class PPO_MAIN:
         return self.env.StateSpace
         
     def rollout(self):
+        print("rolling out")
         """
             Return:
                 batch_obs - the observations collected this batch. Shape: (number of timesteps, dimension of observation)
@@ -285,7 +282,6 @@ class PPO_MAIN:
             
             ep_rews = [] # rewards collected per episode
 
-            # Reset the environment. sNote that obs is short for observation. 
             obs = self.env.reset()
             done = False
             
@@ -349,7 +345,7 @@ class PPO_MAIN:
 
         # Log the episodic returns and episodic lengths in this batch.
 
-
+        print("roll out")
         return batch_obs, batch_acts, batch_log_probs, batch_rtgs, batch_lens
 
     def compute_rtgs(self, batch_rews):

@@ -1,12 +1,19 @@
 
 
 
+from audioop import add
+import copy
 import torch, random, dgl
 import networkx as nx
 from rdkit import Chem
 import dgl.data
 
-from .Utils import permute_mol, permute_rot, SanitizeNoKEKU, mol_to_graph_full, MolFromGraphsFULL, permuteAtomToEnd
+from .utils import permute_mol, permute_rot, SanitizeNoKEKU, mol_to_graph_full, MolFromGraphsFULL, permuteAtomToEnd
+import os
+print(os.getcwd(), 'curr')
+
+
+
 device = None
 
 
@@ -19,10 +26,9 @@ class ChemEnv(object):
     
     
     '''
-    def __init__(self, num_chunks, max_nodes, num_atom_types, num_node_feats, num_edge_types, bond_padding, RewardModule, mol_featurizer, writer):
+    def __init__(self, num_node_feats, RewardModule, mol_featurizer, writer):
         
-        self.num_chunks = num_chunks
-        self.curr_chunk = random.randint(0,num_chunks)
+
         self.path = './graph_decomp/chunk_'
         
         '''
@@ -38,8 +44,6 @@ class ChemEnv(object):
         '''
         ENV_Attributes
         '''
-        self.max_nodes = max_nodes
-        self.bond_padding = bond_padding 
         self.num_atom_types = self.atom_list.__len__()
         self.batch_dim = 1
         
@@ -126,14 +130,26 @@ class ChemEnv(object):
                 
     def resetStateSpace(self):
         ### bad bad bad
-        graph_id = random.randint(1,500000) ###so lazy erggg
-        graph, graph_dict = dgl.load_graphs('./graph_decomp/full_chunka',[graph_id])
+        
+        
+        while True:
+            graph_id = random.randint(1,500000) ###so lazy erggg
+            graph, graph_dict = dgl.load_graphs('./GraphDecomp/graphData/full_chunka',[graph_id])
+
+            try:
+                mol = MolFromGraphsFULL(graph[0])
+                SanitizeNoKEKU(mol)
+                break
+            except:
+                print('err')
+                pass
 
         graph = graph[0]
         last_action = graph_dict['last_action'][graph_id]
         last_atom_feat = graph_dict['last_atom_feats'][graph_id]
         
         mol = MolFromGraphsFULL(graph)
+        SanitizeNoKEKU(mol)
         
         self.last_action_node = last_action.expand(1,1).to(device)
         self.last_atom_features = torch.unsqueeze(last_atom_feat, dim = 0)
@@ -178,7 +194,37 @@ class ChemEnv(object):
         else:
             self.StateSpace.AddAtom(Chem.Atom(node_choice))
             
-            
+    def valiateMol(self,mol):
+        """method for validating molecules
+
+        Args:
+            mol (Chem.RDMol): Chem molecule
+
+        Returns:
+            bool: whether the molecule is good or not
+        """
+
+        #check connected
+        try:
+            if not nx.is_connected(mol_to_graph_full(mol).to_networkx().to_undirected()):
+                return False
+        except:
+            return False
+
+        #check kekulization    
+        try:
+            Chem.SanitizeMol(mol)
+        except Chem.rdchem.KekulizeException:
+            return False
+
+
+        return True
+
+        
+
+
+
+        
         
     def addEdge(self, edge_type, atom_id, give_reward = True):
         '''
@@ -196,9 +242,11 @@ class ChemEnv(object):
         elif edge_type == 2:
             bond = Chem.rdchem.BondType.DOUBLE
 
-        mol_copy = permute_mol(self.StateSpace, lambda x: x)
+        mol_copy = copy.deepcopy(self.StateSpace)
         mol_copy.UpdatePropertyCache()
         SanitizeNoKEKU(mol_copy)
+
+
         
         addable = True
         
@@ -212,39 +260,15 @@ class ChemEnv(object):
         #add bond to complete the rest of the checks
         try:
             mol_copy.AddBond(atom_id,self.StateSpace.GetNumAtoms()-1,bond)
+            mol_copy.UpdatePropertyCache() 
+            SanitizeNoKEKU(mol_copy)
         except:
             addable = False
+
+        validated = self.valiateMol(mol_copy)
             
-            
-        #check is connected
-        try:
-            if nx.is_connected(mol_to_graph_full(mol_copy).to_networkx().to_undirected()):
-                connected = True
-        except:
-            unknown_pass = False
-            
-
-        #check kekulization    
-        try:
-            Chem.Kekulize(mol_copy)
-        except Chem.rdchem.KekulizeException:
-            good_keku = False
-
-        #atom valence
-        try:
-            SanitizeNoKEKU(mol_copy)
-        except Chem.rdchem.AtomValenceException:
-            self.log += 'valence overload \n' 
-            good_valence = False   
-
-
-        if all([addable, connected,good_keku,good_valence,unknown_pass]):
-            success = True
-        else:
-            success = False
         
-        
-        if success:
+        if validated and addable:
             self.StateSpace.AddBond(atom_id,self.StateSpace.GetNumAtoms()-1,bond)
             self.StateSpace.UpdatePropertyCache()
             Chem.SanitizeMol(self.StateSpace)
@@ -313,26 +337,20 @@ class ChemEnv(object):
         self.reward = 0
         self.log = ""
         terminated = False
-        #print(action)
-                
-        
+   
         #case for termination
         if action == 0:
             self.log += 'terminating \n' 
             self.Done = True        
             terminated = True
             '''final rewards '''
-            
-            
-                
+        
         #case for adding a node
         elif action > 0 and action < self.num_atom_types+1:
             self.log += ("------adding "+ self.atom_list[action-1] +" atom------ \n")
             self.addNode(self.atom_list[action-1])
             SanitizeNoKEKU(self.StateSpace)
-            
-                
-                
+        
         #case for edge addition
         elif action < 1 + self.num_atom_types + (2*self.__len__()):
                        

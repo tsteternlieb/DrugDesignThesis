@@ -1,12 +1,14 @@
+
+if __name__ == '__main__':
+    
+    from ..Rewards.rewards import FinalRewardModule
+    from ..enviroment.ChemEnv import ChemEnv
+    from ..models import BaseLine, init_weights_recursive
+    from ..PPO import PPO_MAIN
+
 import time, random, dgl, torch
 from torch.optim import Adam
 from torch.utils.tensorboard import SummaryWriter
-from ..Rewards.rewards import FinalRewardModule
-from ..enviroment.ChemEnv import ChemEnv
-from ..models import BaseLine, init_weights_recursive
-from ..PPO import PPO_MAIN
-
-
 device = None
 
 
@@ -40,11 +42,19 @@ class GraphDataLoader():
         
     
 class SupervisedTrainingWrapper():
-    def __init__(self, input_dim, batch_size, num_atom_types, writer, data_set_size, path = './graph_decomp/full_chunka'):
-        #svt = SupervisedTrainingWrapper(54,5,15,None)
-        self.path = path        
-        self.policy = None #BaseLine(input_dim,300,17+1).cuda()
-        self.optim = Adam(self.policy.parameters(), lr=3e-4)
+    def __init__(self, model, batch_size, data_set_size, writer, path = './graph_decomp/full_chunka'):
+        """Supervised Trainier
+
+        Args:
+            model (torch.nn.Module): model
+            batch_size (int): batch size
+            data_set_size (int): data set size
+            writer (writer): torch writer
+            path (str, optional): training data path. Defaults to './graph_decomp/full_chunka'.
+        """
+        self.path = path     
+        self.model = model   
+        self.optim = Adam(self.model.parameters(), lr=3e-4)
         self.loss_fn = torch.nn.CrossEntropyLoss()
         self.chunk_idx = 0
         
@@ -55,7 +65,6 @@ class SupervisedTrainingWrapper():
         self.batch_size = batch_size
         self.data_set_size = data_set_size
         self.dataIter = GraphDataLoader(path,batch_size,data_set_size)
-        print(data_set_size)
 
     def CalcAccuracy(self):
         a,b,c,d = next(self.dataIter)
@@ -63,7 +72,7 @@ class SupervisedTrainingWrapper():
     
     
     def calc_accuracy(self,graphs, last_action_nodes, last_atom_feats, actions):
-        y_logits = self.policy(graphs, last_action_nodes, last_atom_feats)
+        y_logits = self.model(graphs, last_action_nodes, last_atom_feats)
         values, pred_labels = y_logits.max(dim=1)
         acc = sum(pred_labels == actions)/actions.size()[0]
         return acc
@@ -80,19 +89,19 @@ class SupervisedTrainingWrapper():
         
         for i in range(num_epochs):
             acc = self.CalcAccuracy()
-            t0 = time()
+            t0 = time.time()
             for step in range(steps_per_epoch):
                 self._train()
             self._train()
-            t1 = time()
+            t1 = time.time()
             
-            print(f'Time for epoch {i} is {t1-t0}, random accuracy is {acc}')
+            print(f'Time for epoch {i} is {t1 - t0} , random accuracy is {acc}')
             
             
     def _train(self,calc_accuracy = True, update = True):
         graphs, last_action_nodes, last_atom_feats, actions = next(self.dataIter)
         
-        pred = self.policy.forward(graphs, last_action_nodes,last_atom_feats, softmax=False)
+        pred = self.model.forward(graphs, last_action_nodes,last_atom_feats, softmax=False)
         loss = self.loss_fn(pred,actions.long())
         
         if calc_accuracy:
@@ -108,64 +117,14 @@ class SupervisedTrainingWrapper():
         self.n_iter += 1
 
 
-class Supervised_Trainer(SupervisedTrainingWrapper):
-    def __init__(self,policy_model, **kwargs):
-        self.policy = policy_model
-        super().__init__(**kwargs) 
+# class Supervised_Trainer(SupervisedTrainingWrapper):
+#     def __init__(self,policy_model, **kwargs):
+#         self.policy = policy_model
+#         print(self.policy)
+#         super().__init__(**kwargs) 
         
         
-    def TrainModel(self,total_epochs):
+#     def TrainModel(self,total_epochs):
         
-        self.Train(total_epochs)
-        return self.policy
-    
-    
-class SupervisedToReinforcement():
-    def __init__(self,run_title, rewards_list, chem_env_kwargs,train_kwargs, PPO_kwargs, svw_kwargs):
-        
-        self.run_title = run_title
-        self.writer = SummaryWriter(f'./tb_logs/{run_title}/{run_title}_logs')
-        
-        self.reward_module =  FinalRewardModule(self.writer,rewards_list)
-        
-        chem_env_kwargs['num_chunks'] = train_kwargs['num_chunks']
-        chem_env_kwargs['RewardModule'] = self.reward_module
-        chem_env_kwargs['writer'] = self.writer
-        
-        self.ChemEnv = ChemEnv(**chem_env_kwargs)
-        
-        
-        input_dim = chem_env_kwargs['num_node_feats']
-        
-        #self.policy = Spin2(input_dim,300,chem_env_kwargs['num_atom_types']).cuda()
-        self.policy = BaseLine(input_dim,800,chem_env_kwargs['num_atom_types']+1).cuda()
-        self.policy.apply(init_weights_recursive)
-        
-        
-        
-        svw_kwargs['writer'] = self.writer
-        svw_kwargs['input_dim'] = input_dim
-        svw_kwargs['num_atom_types'] = chem_env_kwargs['num_atom_types']
-        
-        print(svw_kwargs)
-        self.svw = Supervised_Trainer(self.policy, **svw_kwargs)
-        
-        PPO_kwargs['env'] = self.ChemEnv
-        PPO_kwargs['actor'] = self.policy
-        PPO_kwargs['writer'] = self.writer
-        self.PPO = PPO_MAIN(**PPO_kwargs)
-        self.PPO.to_device(device)
-        
-    
-    def Train(self,total_epochs, batch_size, epochs_per_chunk, num_chunks, PPO_steps, cv_path):
-        
-        self.svw.TrainModel(total_epochs)
-    
-        # torch.save({
-        #     'model_state_dict': self.policy.state_dict(),
-        #     'optimizer_state_dict': self.svw.optim.state_dict()
-        #     }, f'./{self.run_title}/SavedModel')
-        
-        print("fra")
-        # self.PPO.learn(PPO_steps)
-        
+#         self.Train(total_epochs)
+#         return self.policy

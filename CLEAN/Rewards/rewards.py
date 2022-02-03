@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from autoDock import VinaWrapper
+# from autoDock import VinaWrapper
 from rdkit import Chem
 import matplotlib.pyplot as plt
 
@@ -22,24 +22,25 @@ class SingleReward(ABC):
     def giveReward(self, x):
         reward = self.rescale(self._reward(x))
         self.reward_list.append(reward)
+        return reward
         
     
     
-class DockReward(SingleReward):
-    def __init__(self,receptor_path):
-        self.reward_list = []
-        self.vinaWrapper = VinaWrapper(receptor_path)
-        super(DockReward,self)
+# class DockReward(SingleReward):
+#     def __init__(self,receptor_path):
+#         self.reward_list = []
+#         self.vinaWrapper = VinaWrapper(receptor_path)
+#         super(DockReward,self)
         
-    def name(self):
-        return "DockReward"
+#     def name(self):
+#         return "DockReward"
     
-    def rescale(self,value):
-        return (-1*value) / 4
+#     def rescale(self,value):
+#         return (-1*value) / 4
     
-    def _reward(self,mol):
-        smile = Chem.MolToSmile(mol)
-        return self.rescale(self.vinaWrapper.CalculateEnergies())
+#     def _reward(self,mol):
+#         smile = Chem.MolToSmile(mol)
+#         return self.rescale(self.vinaWrapper.CalculateEnergies())
     
     
 class SizeReward(SingleReward):
@@ -53,7 +54,8 @@ class SizeReward(SingleReward):
         return value/4
     
     def _reward(self,mol):
-        return(len(mol.GetAtoms()))
+        return 0
+        # return(len(mol.GetAtoms()))
     
     
 class FinalRewardModule():
@@ -81,6 +83,5 @@ class FinalRewardModule():
             reward = rewardObject.giveReward(mol)
             self.writer.add_scalar(rewardObject.name(), reward, self.n_iter)
             rewards += reward
-        
         return rewards
             
