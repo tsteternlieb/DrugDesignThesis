@@ -17,6 +17,8 @@ class GraphDataLoader():
         self.path = path
         self.length = length
         
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
         self.batch_size = batch_size
         self.indicies = list(range(length))
         random.shuffle(self.indicies)
@@ -29,7 +31,7 @@ class GraphDataLoader():
         last_atom_feat = torch.stack([graph_dict['last_atom_feats'][idx] for idx in indices], dim = 0)
         action = torch.stack([graph_dict['actions'][idx] for idx in indices], dim = 0)
         graphs = dgl.batch(graphs)
-        return graphs.to(device), torch.unsqueeze(last_action,dim=1).to(device), last_atom_feat.to(device), action.to(device)
+        return graphs.to(self.device), torch.unsqueeze(last_action,dim=1).to(self.device), last_atom_feat.to(self.device), action.to(self.device)
     
     def __next__(self):
         if self.curr_idx + self.batch_size > self.length:

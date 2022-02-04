@@ -32,8 +32,7 @@ class Trainer():
         self.PPO.to_device()
 
         self.sv_trainer = sv_trainer
-        
-    
+
     def Train(self,sv_epochs: int, PPO_steps: int):
         
         self.sv_trainer.Train(sv_epochs)
@@ -50,3 +49,6 @@ class Trainer():
             'optimizer_state_dict': self.svw.optim.state_dict()
             }, f'./{self.run_title}/fine_tuned_model')
         
+
+# class TrainWrapper():
+#     def __init__(self, )
