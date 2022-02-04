@@ -2,13 +2,14 @@ from PPO import PPOTrainer
 from enviroment.ChemEnv import ChemEnv
 from supervised_training.sv_utils import SupervisedTrainingWrapper
 from training import Trainer
-from torch.utils.tensorboard import SummaryWriter
 from models import BaseLine
 from Rewards.rewards import FinalRewardModule
 from config_utils import generateRewardModule, generateMolFeaturizer
-import torch
-import yaml
 
+from torch.utils.tensorboard import SummaryWriter
+import torch
+
+import yaml
 import argparse
 import subprocess
 
