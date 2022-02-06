@@ -8,7 +8,7 @@ import networkx as nx
 from rdkit import Chem
 import dgl.data
 
-from .utils import permute_mol, permute_rot, SanitizeNoKEKU, mol_to_graph_full, MolFromGraphsFULL, permuteAtomToEnd
+from .Utils import permute_mol, permute_rot, SanitizeNoKEKU, mol_to_graph_full, MolFromGraphsFULL, permuteAtomToEnd
 import os
 print(os.getcwd(), 'curr')
 
