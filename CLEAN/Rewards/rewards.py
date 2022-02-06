@@ -51,11 +51,10 @@ class SizeReward(SingleReward):
         return "SizeReward"
     
     def rescale(self,value):
-        return value/4
+        return value
     
     def _reward(self,mol):
-        return 0
-        # return(len(mol.GetAtoms()))
+        return(len(mol.GetAtoms()))
     
     
 class FinalRewardModule():
