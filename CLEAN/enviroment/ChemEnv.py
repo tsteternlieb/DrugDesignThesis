@@ -10,7 +10,6 @@ import dgl.data
 
 from .Utils import permute_mol, permute_rot, SanitizeNoKEKU, mol_to_graph_full, MolFromGraphsFULL, permuteAtomToEnd
 import os
-print(os.getcwd(), 'curr')
 
 
 
@@ -77,18 +76,26 @@ class ChemEnv(object):
         
         
     def __len__(self):
+        """size of molecule
+
+        Returns:
+            int: returns size of the molecule
+        """
         return self.StateSpace.GetNumAtoms()
     
     @property
     def n_nodes(self):
         return self.StateSpace.GetNumAtoms()
              
-            
-    def clear(self):
-        self.StateSpace = Chem.RWMol()
-        self.last_atom_features = torch.zeros(1,self.num_node_feats).to(device)
+
         
     def addStructure(self,mol2):
+        """method for adding an entire structure to the molecule 
+
+        Args:
+            mol2 (Chem.RWMol): mol to be added to current state space
+        """
+        
         mol1 = self.StateSpace
         add_dif = mol1.GetNumAtoms()
         for atom in mol2.GetAtoms():
@@ -103,32 +110,47 @@ class ChemEnv(object):
             
             
     def addBenzine(self):
+        """add benzine ring
+        """
         mol = Chem.MolFromSmiles('c1ccccc1')
         self.addStructure(mol)
         
         
     def addPyridine(self):
+        """add pyridine 
+        """
         mol = Chem.MolFromSmiles('N1=CC=CC=C1')
         mol = permute_mol(mol,permute_rot(mol.GetNumAtoms()))
         SanitizeNoKEKU(mol)
         self.addStructure(mol)
         
     def addPyrrole(self):
+        """add Pyrrole
+        """
         mol = Chem.MolFromSmiles('N1C=CC=C1')
         mol = permuteAtomToEnd(mol,0)
         self.addStructure(mol)
         
     def addNaptholene(self):
+        """add Naptholene
+        """
         mol = Chem.MolFromSmiles('C1=CC=C2C=CC=CC2=C1')
         self.addStructure(mol)
         
     def assignMol(self,mol):
+        """method for assigning molecule to state space
+
+        Args:
+            mol ([type]): [description]
+        """
         mol = Chem.RWMol(mol)
         self.StateSpace = mol
         self.getObs()
         
                 
     def resetStateSpace(self):
+        """a way to reset state space but its bad code
+        """
         ### bad bad bad
         
         
@@ -159,6 +181,11 @@ class ChemEnv(object):
         
             
     def reset(self): 
+        """reset 
+
+        Returns:
+            obs: returns tuple of (graph, last_action_node, node features)
+        """
         self.resetStateSpace()    
         
         self.reward = 0
@@ -174,7 +201,13 @@ class ChemEnv(object):
     
 
     
-    def addNode(self, node_choice, give_reward = True):  
+    def addNode(self, node_choice, give_reward = True):
+        """function for adding a node to the state space
+
+        Args:
+            node_choice (str): type of node to add  
+            give_reward (bool, optional): whether to give the reward or not. Defaults to True.
+        """
         #####figure out last features 
         if self.last_action_node == 1:
             if give_reward:
@@ -227,10 +260,13 @@ class ChemEnv(object):
         
         
     def addEdge(self, edge_type, atom_id, give_reward = True):
-        '''
-        Method for calculating new graph after adding an edge between the last node added and nodes[atom_id]
-        returns nothing as we mutate in place
-        '''
+        """Method for adding a bond 
+
+        Args:
+            edge_type (int): 1 for a single bond, 2 for a double 
+            atom_id (int): which atom to connect to the last atom added
+            give_reward (bool, optional): whether or not to give reward. Defaults to True.
+        """
      
         try:
             atom_id = (atom_id).item()
@@ -246,14 +282,7 @@ class ChemEnv(object):
         mol_copy.UpdatePropertyCache()
         SanitizeNoKEKU(mol_copy)
 
-
-        
         addable = True
-        
-        connected = False
-        good_keku = True 
-        good_valence = True
-        unknown_pass = True
         
         #perform checks
 
@@ -281,6 +310,12 @@ class ChemEnv(object):
             self.reward-=.1
      
     def removeUnconnected(self,mol, sanitize = True):
+        """method for removing unconnected atoms at evaluation time
+
+        Args:
+            mol (Chem.RWMol()): mol
+            sanitize (bool, optional): whether or not to sanitize after removal. Defaults to True.
+        """
         if mol.GetAtomWithIdx(mol.GetNumAtoms()-1).GetDegree() == 0:
             mol.RemoveAtom(mol.GetNumAtoms()-1)
             
@@ -299,20 +334,46 @@ class ChemEnv(object):
             Chem.SanitizeMol(self.StateSpace)
     
     def checkValence(self, atom_id, edge_type):
+        """check if valences are ok before adding. Should be looked at  
+
+        Args:
+            atom_id (int): atom to check
+            edge_type (int): single or double bond  
+
+        Returns:
+            bool: whether it passes
+        """
         atom = self.StateSpace.GetAtomWithIdx(atom_id)
         currValence = atom.GetExplicitValence()
         maxValence = 8 - self.atom_bond_dict[atom.GetSymbol()][-1]      
         return currValence + edge_type > maxValence                
     
     def modelRewards(self, mol): 
+        """rewards agent
+
+        Args:
+            mol (Chem.RWMol): mol to evaluate
+
+        Returns:
+            float: score
+        """
         return self.RewardModule.GiveReward(mol)
     
     def graphObs(self):
+        """get graph from molecule
+
+        Returns:
+            graph: converted molecule
+        """
         self.StateSpace.UpdatePropertyCache()
         return dgl.add_self_loop(dgl.remove_self_loop(self.mol_featurizer(self.StateSpace))).to(device)
     
     def getObs(self):
-        
+        """get state 
+
+        Returns:
+            state: observations
+        """
         graph = self.graphObs()
         self.last_atom_feats = torch.unsqueeze(graph.ndata['atomic'][-1],dim=0)   
         
@@ -324,11 +385,16 @@ class ChemEnv(object):
         return graph, self.last_action_node, self.last_atom_feats
     
     def step(self, action, final_step = False, verbose = False):
-        '''
-        Function for a single step in our trajectory
-        Expect action to be an int indexing
-        [terminate, add_atom1,...,add_atomN, node1_edge, ... ,nodeN_edge]
-        '''
+        """single step in env
+
+        Args:
+            action (int): what action
+            final_step (bool, optional): whether it is the final step. Defaults to False.
+            verbose (bool, optional): amount of logging. Defaults to False.
+
+        Returns:
+            float: returns relavent info for PPO
+        """
         self.TempSmiles = Chem.MolToSmiles(self.StateSpace)
         
         self.episode_length += 1

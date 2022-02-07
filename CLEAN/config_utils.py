@@ -1,5 +1,5 @@
 from Rewards.rewards import SizeReward, FinalRewardModule
-from enviroment.utils import mol_to_graph_full
+from enviroment.Utils import mol_to_graph_full
 
 def generateRewardModule(reward_names):
     rewards = []
