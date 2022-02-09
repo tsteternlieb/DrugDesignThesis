@@ -12,7 +12,7 @@ from torch.distributions import Categorical
 import dgl
 
 from enviroment.ChemEnv import ChemEnv
-from enviroment.utils import selfLoop
+from enviroment.Utils import selfLoop
 from models import init_weights_recursive, BaseLine, CriticSqueeze
 
 device = None

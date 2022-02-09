@@ -21,7 +21,7 @@ class Handler():
     def __get_n_best(self,n):
         obs = self.env.getObs()
         predictions = self.model(obs)
-        top_actions = torch.topk(predictions)
+        top_actions = torch.topk(predictions, n)
         
         mol = obs[0]
         
