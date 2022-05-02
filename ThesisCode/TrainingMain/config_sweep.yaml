@@ -1,0 +1,115 @@
+program: main.py
+method: random
+metric:
+  goal: maximize
+  name: validation accuracy
+parameters:
+
+  run: 
+    value: sweep
+  
+  NUM_NODE_FEATS:
+    value: 54
+  MOL_FEATURIZER:
+    value: 'mol_to_graph_full'
+  REWARD_MODULES:
+    value: ['SIZE']
+    
+  # ACTOR_VARIABLES: 
+  HIDDEN_DIM_A:
+    values: [350,400,450,500,550,600,650]
+
+  NUM_ATOM_TYPES_A:
+    value:  17
+  DROPOUT_A: 
+    values: [.4,.5,.6,.7,.8]
+  GRAPH_ACTIVATION_A: 
+    value: 'ReLU'
+  DENSE_ACTIVATION_A: 
+    values: ['ReLU','ELU','LeakyReLU']
+  MODEL_TYPE_A:  
+    value: GatedGraphConv
+  GRAPH_NUM_LAYERS_A: 
+    values: [3,4,5]
+  DENSE_NUM_LAYERS_A: 
+    values: [3,4,5]
+  DENSE_NORMALIZATION_A:
+    values: ['LayerNorm', 'None']
+
+
+  # CRITIC_VARIABLES:
+  HIDDEN_DIM_C: 
+    values: [300,350,400,450,500,550,600]
+  MODEL_TYPE_C:  
+    value: GatedGraphConv
+  GRAPH_NUM_LAYERS_C: 
+    values: [3,4,5]
+  DENSE_NUM_LAYERS_C: 
+    values: [3,4,5]
+  GRAPH_ACTIVATION_C: 
+    value: 'ReLU'
+  DENSE_ACTIVATION_C: 
+    values: ['ReLU','ELU','LeakyReLU']
+  DROPOUT_C:  
+    values: [.3,.4,.5]
+  DENSE_NORMALIZATION_C:
+    values: ['LayerNorm', 'None']
+
+
+
+
+  # PPO_VARIABLES :
+  PPO_BATCH_SIZE : 
+    # values: [32,64,128,256]
+    disdistribution: q_log_uniform
+    min: 32
+    max: 1024
+  TIMESTEPS_PER_ITERATION : 
+    distribution: int_uniform
+    min: 1000
+    max: 10000
+  CLIP: 
+    distribution: uniform
+    min: 0.02
+    max: .15
+  A_LR: 
+    value: 3e-5
+  C_LR : 
+    value: 3e-5
+  NUM_UPDATED_PER_ITERATION: 
+    distribution: int_uniform
+    min: 3
+    max: 7
+  MAX_TIMESTEPS_PER_EPISODE: 
+    value: 40
+  GAMMA: 
+    distribution: uniform
+    min: .95
+    max: .99
+
+
+
+  # #SUPERVISED TRAINING VARIABLES
+  # SUPERVISED_TRAINING_VARIABLES:
+  SUPERVSED_LR : 
+    distribution: uniform
+    min: 3e-5
+    max: 3e-3
+  SUPERVISED_LR_DECAY : 
+        distribution: uniform
+        min: .9
+        max: 1
+  SUPERVISED_BATCH_SIZE: 
+      values: [32,64,128,256,512]
+  DATASET_SIZE: 
+      value: 507528
+  PATH: 
+      value: './GraphDecomp/graphData/full_chunka'
+
+  # FINAL_TRAINING_VARIABLES:
+  SV_EPOCHS: 
+      values: [4,6,8,12]
+  PPO_STEPS: 
+      value: 100000
+
+  
